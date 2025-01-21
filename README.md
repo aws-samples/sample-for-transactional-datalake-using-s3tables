@@ -1,11 +1,11 @@
-## My Project
+# AWS S3 Tables Samples 
 
-TODO: Fill this README out!
+This repository contains a collection of samples, best practices and reference architectures for implementing S3 Tables along with other AWS Services.
 
-Be sure to:
+## Contents
 
-* Change the title in this README
-* Edit your repository description on GitHub
+* [Kinesis Firehose Streaming data to S3 Tables](./kinesis-firehose-stream/README.md)
+
 
 ## Security
 
@@ -14,4 +14,3 @@ See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more inform
 ## License
 
 This library is licensed under the MIT-0 License. See the LICENSE file.
-
