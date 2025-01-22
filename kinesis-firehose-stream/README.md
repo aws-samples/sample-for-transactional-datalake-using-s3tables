@@ -1,5 +1,5 @@
 # Stream DynamoDB data to S3 Tables using Kinesis Firehose Delivery
-This sample illustrates an approach on how to stream data from DynamoDB table to S3 Tables in near real-time using Kinesis Stream and Kinesis Firehose. Once the data is in S3 Tables, it can be queried using Athena for your analytics purposes. 
+This sample illustrates an approach on how to stream data from DynamoDB table to S3 Tables in near real-time using Amazon Kinesis Stream and Kinesis Firehose. Once the data is in S3 Tables, it can be queried using Athena for your analytics purposes. 
 
 ![arch diagram](./diagrams/s3-tables-stream-architecture.png)
 
@@ -8,14 +8,14 @@ List of AWS Services used in this sample
 - **S3 Tables**: This is the core and centre piece of this sample. Data is ingested through Firehose and then queried using Athena.
 - **Kinesis Firehose**: Receives the data from Kinesis Data Stream and pushes to S3 Tables
 - **Kinesis Stream**: Pushing the data from DynamoDB table to Kinesis Firehose
-- **DynamoDB**:Source database for streaming the data to S3 Tables. We will insert records in DynamoDB table which will flow through to S3 Tables via Kinesis Data Stream and Firehose
+- **DynamoDB**: Source database for streaming the data to S3 Tables. We will insert records in DynamoDB table which will flow through to S3 Tables via Kinesis Data Stream and Firehose
 - **Lambda**: Lambda is used for data formation and also for providing access to Lakeformation which allows Athena to access the namespace and 
 - **Athena**: This is used to query the data which are pushed to S3 Tables from DynamoDB via Kinesis Firehose and Data Streams.
 
 
 ### Clone the repo 
 ```
-git clone git@ssh.gitlab.aws.dev:sssumar/s3-tables.git ( ToDo - update with public repo URL)
+git clone https://github.com/aws-samples/sample-for-transactional-datalake-using-s3tables.git
 ```
 
 ### Step 1: Setup your python development environment using say VS Code IDE.
