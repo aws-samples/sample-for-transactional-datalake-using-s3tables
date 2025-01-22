@@ -21,6 +21,8 @@ git clone https://github.com/aws-samples/sample-for-transactional-datalake-using
 ### Step 1: Setup your python development environment using say VS Code IDE.
 
 ```
+cd sample-for-transactional-datalake-using-s3tables/kinesis-firehose-stream
+
 python3 -m venv .venv
 
 source .venv/bin/activate

@@ -5,4 +5,3 @@ aws-cdk.aws-dynamodb
 aws-cdk.aws-s3
 aws-cdk.aws-kinesis
 aws-cdk.aws-kinesisfirehose
-aws-cdk.cx-api
