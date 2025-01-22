@@ -29,8 +29,6 @@ source .venv/bin/activate
 
 sudo npm install -g aws-cdk
 
-pip install aws-cdk-lib
-
 pip install -r requirements.txt
 
 ```
@@ -58,7 +56,17 @@ At this point you can now synthesize the CloudFormation template for this code.
 ```
 cdk synth
 ```
+Note : If you encounter "RuntimeError: Cannot find module '@aws-cdk/cx-api'", then follow the below steps : 
+```
+# Remove existing CDK packages
+pip uninstall aws-cdk.cx-api aws-cdk-lib -y
 
+# Clear pip cache
+pip cache purge
+
+# Reinstall dependencies
+pip install -r requirements.txt
+```
 Bootstrap your CDK env to the desired AWS account and region where S3 Tables is available
 
 ```
