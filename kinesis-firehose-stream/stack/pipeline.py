@@ -121,26 +121,29 @@ class PipelineStack(Stack):
             self,
             "Boto3Layer",
             code=lambda_.Code.from_asset("boto3-layer/"),
-            compatible_runtimes=[
-                lambda_.Runtime.PYTHON_3_13
-            ], 
+            compatible_runtimes=[lambda_.Runtime.PYTHON_3_13],
             description="Boto3 library",
         )
 
-        # Create Lambda function to manage S3 Table
-        manage_s3_table_lambda = lambda_.Function(
+        # Create the IAM role for the Lambda function
+        manage_s3_table_role = iam.Role(
             self,
-            "ManageS3TableLambda",
-            runtime=lambda_.Runtime.PYTHON_3_13,
-            handler="index.handler",
-            code=lambda_.Code.from_asset("lambda/custom_resource"),
-            timeout=cdk.Duration.minutes(5),
-            layers=[boto3_layer],
+            "ManageS3TableLambdaRole",
+            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            description="Role for Managing S3 Table Lambda function",
         )
 
-        # Grant s3tables permissions to Lambda
-        manage_s3_table_lambda.add_to_role_policy(
+        # Add AWS Lambda basic execution policy
+        manage_s3_table_role.add_managed_policy(
+            iam.ManagedPolicy.from_aws_managed_policy_name(
+                "service-role/AWSLambdaBasicExecutionRole"
+            )
+        )
+
+        # Add policies for S3 Table access
+        manage_s3_table_role.add_to_policy(
             iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
                 actions=[
                     "s3tables:CreateTable",
                     "s3tables:DeleteTable",
@@ -154,10 +157,23 @@ class PipelineStack(Stack):
                     "s3tables:DeleteTableBucket",
                 ],
                 resources=[
-                    f"arn:aws:s3tables:{Stack.of(self).region}:{Stack.of(self).account}:bucket/{table_bucket_name}"
-                    # f"arn:aws:s3tables:{Stack.of(self).region}:{Stack.of(self).account}:bucket/{table_bucket_name}/*", AwsSolutions-IAM5
+                    f"arn:aws:s3tables:{Stack.of(self).region}:{Stack.of(self).account}:bucket/{table_bucket_name}",
+                    f"arn:aws:s3tables:{Stack.of(self).region}:{Stack.of(self).account}:bucket/{table_bucket_name}/*",
+                    f"arn:aws:s3tables:{Stack.of(self).region}:{Stack.of(self).account}:bucket/*",  # Added for ListTableBuckets
                 ],
             )
+        )
+
+        # Create Lambda function to manage S3 Table
+        manage_s3_table_lambda = lambda_.Function(
+            self,
+            "ManageS3TableLambda",
+            runtime=lambda_.Runtime.PYTHON_3_13,
+            handler="index.handler",
+            code=lambda_.Code.from_asset("lambda/custom_resource"),
+            timeout=cdk.Duration.minutes(5),
+            layers=[boto3_layer],
+            role=manage_s3_table_role,  # Assign the role to the Lambda function
         )
 
         # Step 5: Create Custom Resource to invoke Lambda
