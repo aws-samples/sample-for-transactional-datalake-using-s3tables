@@ -123,6 +123,14 @@ aws lakeformation grant-permissions \
   --resource '{"Table": {"CatalogId": "123456789012:s3tablescatalog/streamtablebucket", "DatabaseName": "streamnamespace", "Name": "streamtable"}}' \
   --permissions SELECT DESCRIBE 
 ```
+You have two options to update the metadata: 
+1. Using the automated script :  scripts/update_metadata.py
+Note : Update the variable 'athena_output_location' before running the script. 
+```
+python3 scripts/update_metadata.py
+```
+
+2. Manually by following the below steps using CLI. 
 
 Navigate to AWS CloudShell and follow the steps below:
 
