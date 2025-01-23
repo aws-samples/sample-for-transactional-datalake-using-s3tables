@@ -24,7 +24,7 @@ class UpdateMetadata:
 
         self.table_bucket_name = "streamtablebucket"  # HARD CODED - Update if required
         self.temp_table_name = "temptable"  # HARD CODED - Update if requird
-        self.athena_output_location = f"s3://bedrock-kb-us-east-1-743736387305/"  # HARD CODED - Update before running this script
+        self.athena_output_location = f"s3://update-bucket-name/"  # HARD CODED - Update before running this script
 
     def get_table_bucket_arn(self):
         try:
