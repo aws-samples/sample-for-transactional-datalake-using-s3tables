@@ -169,7 +169,7 @@ Let us insert some items into the DynamoDB Table using the following command.
 
 ```
 aws dynamodb put-item \
-    --table-name stream  \
+    --table-name sourcetable  \
     --item \
         '{"id": {"S": "1000"}, "name": {"S": "dynamo"}}'
 

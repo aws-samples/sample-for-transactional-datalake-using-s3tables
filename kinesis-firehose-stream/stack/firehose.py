@@ -38,13 +38,16 @@ class FirehoseStack(Stack):
                 ),
                 s3_configuration=firehose.CfnDeliveryStream.S3DestinationConfigurationProperty(
                     bucket_arn=failed_delivery_bucket_arn,
-                    buffering_hints=firehose.CfnDeliveryStream.BufferingHintsProperty(
-                        interval_in_seconds=60,
-                        size_in_m_bs=1,  # Increased for better performance with Iceberg
-                    ),
+                    # buffering_hints=firehose.CfnDeliveryStream.BufferingHintsProperty(
+                    #     interval_in_seconds=60,
+                    #     size_in_m_bs=1,  # Increased for better performance with Iceberg
+                    # ),
                     compression_format="UNCOMPRESSED",  # Iceberg handles compression internally
                     error_output_prefix="errors/",
                     role_arn=firehose_role_arn,
+                ),
+                buffering_hints=firehose.CfnDeliveryStream.BufferingHintsProperty(
+                    interval_in_seconds=60, size_in_m_bs=1
                 ),
                 destination_table_configuration_list=[
                     firehose.CfnDeliveryStream.DestinationTableConfigurationProperty(
