@@ -45,12 +45,6 @@ pip install -r requirements-layers.txt -t boto3-layer/python
 
 ### Step 3: Deploy the upstream pipeline resources
 
-Next let us provison all the pipeline resources : 
-- DynamoDB table as source data
-- Kinesis Data Streams and Firehose for pushing the steam data to S3 Tables
-- Lambda to process stream from DynamoDB
-- Lambda as custom resource to create S3 Table Bucket, Namespace & Table. 
-
 At this point, you can now synthesize the CloudFormation template for this code.
 
 ```
@@ -76,7 +70,7 @@ Bootstrap your CDK env to the desired AWS account and [region where S3 Tables is
 cdk bootstrap 111111111111/us-east-1
 ```
 
-We will creating the following table bucket, table, namespace and S3 bucket. Customize the cdk context variables in cdk.context.json if required.
+We will create the following table bucket, table, namespace and S3 bucket. For custom configurations, you can modify the variables in cdk.context.json to align with your specific requirements.
 
 ```
 {
@@ -87,7 +81,12 @@ We will creating the following table bucket, table, namespace and S3 bucket. Cus
 }
 ```
 
-Deploy the pipeline resources
+Next let us provison all the pipeline resources : 
+- DynamoDB table as source data
+- Kinesis Data Streams and Firehose for pushing the steam data to S3 Tables
+- Lambda to process stream from DynamoDB
+- Lambda as custom resource to create S3 Table Bucket, Namespace & Table. 
+
 ```
 cdk deploy PipelineStack
 ```
@@ -123,23 +122,21 @@ Also grant lakeformation permissions to the principal (User or Role) that needs 
 ```
 aws lakeformation grant-permissions --principal '{"DataLakePrincipalIdentifier": "arn:aws:iam::<<123456789012>>:user/<<johndoe>>"}' --resource '{"Table": {"CatalogId": "<<123456789012>>:s3tablescatalog/streamtablebucket", "DatabaseName": "streamnamespace", "Name": "streamtable"}}' --permissions SELECT DESCRIBE 
 ```
-#### 2 Options to update the metadata: 
-*Option 1. Automated*
+**There are TWO options to update the metadata:**
+<u>*Option 1: Automated*</u>
 
 Using the automated script :  scripts/update_metadata.py
 Note : Update the variable 'athena_output_location' before running the script. 
 ```
 python3 scripts/update_metadata.py
 ```
-#### If you have run the above scripts, Go to Step 7
+#### If you have executed the above script, Go to Step 7
 
-*Option 2. Manual Steps*
-
-Manually by following the below steps using AWS CLI. 
+<u>*Option 2: Manual Steps following the below steps using AWS CLI*</u>
 
 Navigate to AWS CloudShell and follow the steps below:
 
-#### 6a: Get warehouse location & version token
+### 6a: Get warehouse location & version token
 First we need to get the warehouse location of the table (streamtable) we have created through CDK. Please replace the AWS Account ID and region in the following command:
 
 ```
@@ -149,7 +146,7 @@ Note the following details:
 "warehouse_location": "s3://f063a63c-xxxx-xxxx-xxxxxxxxxxxxx--table-s3"
 "versionToken": "xxxxxxxxxxxxx"
 
-#### 6b: Create a temporary table
+### 6b: Create a temporary table
 Navigate to Athena and select "default" database. Now create a temp table with the desired defintion. In this example, we have created a table (temptable) with the columns id, name and the metadata like location and table properties. Change the schema as per your up-stream table that you are streaming from. 
 
 ```
@@ -157,7 +154,7 @@ CREATE TABLE default.temptable(id string, name string) LOCATION '<<warehouse_loc
 
 ```
 
-#### 6c: Get Table metadata location
+### 6c: Get Table metadata location
 Navigate to CloudShell. Lets get the metadata location of the temporary table 'default.temptable'.
 
 ```
@@ -167,7 +164,7 @@ aws glue get-table --catalog-id <<AWS-ACCOUNT-ID>> --database-name default --nam
 Note the metadata location
  "metadata_location": "s3://f063a63c-xxxx-xxxx-xxxxxxxxxxxxx--table-s3/metadata/xxxxxxxxxxxx.metadata.json"
 
-#### 6d: Update metadata location 
+### 6d: Update metadata location 
 Now update the metadata location for the S3 table (streamtable) we created using CDK. You will need the metadata location and versionToken that you noted down in step 6a.
 
 ```
@@ -186,13 +183,13 @@ aws dynamodb put-item --table-name sourcetable --item '{"id": {"S": "1000"}, "na
 ```
 
 ### Step 8: Verify the streamed data
-Using Athena Console or CLI you can query the streamed data from S3 Tables (streamtable). Replace the workgroup with the name in your setup. Also, ensure that workgroup has setup an output location (S3 bucket). Alternatively you can also provide the output location as part of the below query at the end like --result-configuration "OutputLocation=s3://your-bucket/query-results/"
+Using Athena Console or CLI you can query the streamed data from S3 Tables (streamtable). Replace the workgroup with the name in your setup. Also, ensure that workgroup has already setup an output location (S3 bucket). Alternatively you can also provide the output location as part of the below query at the end like --result-configuration "OutputLocation=s3://your-bucket/query-results/". Please make sure the user has the permission to write to the S3 bucket.
 
 ```
-aws athena start-query-execution --query-string "SELECT * FROM \"s3tablescatalog/streamtablebucket\".\"streamnamespace\".\"streamtable\"" --work-group "propdata" --query-execution-context "Database=streamnamespace,Catalog=AwsDataCatalog"
+aws athena start-query-execution --query-string "SELECT * FROM \"s3tablescatalog/streamtablebucket\".\"streamnamespace\".\"streamtable\"" --work-group "primary" --query-execution-context "Database=streamnamespace,Catalog=AwsDataCatalog"
 
 ```
-Note the QueryExecutionId from the ouput of the above query and run the following query to see the content of the query
+Note the QueryExecutionId from the ouput of the above query and run the following query to see the content of the query.
     {
         "QueryExecutionId": "08cf4d54-b66a-448a-a62d-a4ca0cd7fb86"
     }
@@ -220,7 +217,7 @@ Delete the resources to avoid unexpected costs.
 cdk destroy --all
 ```
 
-Note : You can tune the Buffer hints configuration of the Firehose delivery stream to control the buffer size and buffer interval to optimize the time it takes for the source event to reach te destination S3 table. 
+Note : You can tune the [buffer hints configuration](https://docs.aws.amazon.com/firehose/latest/dev/buffering.html) of the Firehose delivery stream to control the buffer size and buffer interval to optimize the time it takes for the source event to reach te destination S3 table. 
 
 
 To add additional dependencies, for example other CDK libraries, just add
