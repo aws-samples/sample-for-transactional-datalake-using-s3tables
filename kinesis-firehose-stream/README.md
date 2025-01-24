@@ -18,7 +18,7 @@ List of AWS Services used in this sample
 git clone https://github.com/aws-samples/sample-for-transactional-datalake-using-s3tables.git
 ```
 
-### Step 1: Setup your python development environment using say VS Code IDE.
+### Step 1: Setup your python development environment using an IDE e.g. VS Code.
 
 ```
 cd sample-for-transactional-datalake-using-s3tables/kinesis-firehose-stream
@@ -34,7 +34,7 @@ pip install -r requirements.txt
 ```
 
 ### Step 2: Build the Lambda layers for boto3 SDK 
-We need to follow this step until Lambda by default picks up the latest boto3 release that support s3tables. 
+These steps are required until Lambda by default picks up the latest boto3 release that supports S3 Tables. 
 
 ```
 mkdir boto3-layer
@@ -46,17 +46,17 @@ pip install -r requirements-layers.txt -t boto3-layer/python
 ### Step 3: Deploy the upstream pipeline resources
 
 Next let us provison all the pipeline resources : 
-- DynamoDB Table
-- Kinesis Data Streams
-- Lambda to process stream
+- DynamoDB table as source data
+- Kinesis Data Streams and Firehose for pushing the steam data to S3 Tables
+- Lambda to process stream from DynamoDB
 - Lambda as custom resource to create S3 Table Bucket, Namespace & Table. 
 
-At this point you can now synthesize the CloudFormation template for this code.
+At this point, you can now synthesize the CloudFormation template for this code.
 
 ```
 cdk synth
 ```
-Note : If you encounter "RuntimeError: Cannot find module '@aws-cdk/cx-api'", then follow the below steps : 
+Note : If you encounter "RuntimeError: Cannot find module '@aws-cdk/cx-api'", then follow the below steps and run 'cdk synth' again: 
 ```
 # Remove existing CDK packages
 pip uninstall aws-cdk.cx-api aws-cdk-lib -y
@@ -66,14 +66,17 @@ pip cache purge
 
 # Reinstall dependencies
 pip install -r requirements.txt
+
+# Run cdk synth again
+cdk synth
 ```
-Bootstrap your CDK env to the desired AWS account and region where S3 Tables is available
+Bootstrap your CDK env to the desired AWS account and [region where S3 Tables is available](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-regions-quotas.html)
 
 ```
 cdk bootstrap 111111111111/us-east-1
 ```
 
-Customize the cdk context variables in cdk.context.json if required.
+We will creating the following table bucket, table, namespace and S3 bucket. Customize the cdk context variables in cdk.context.json if required.
 
 ```
 {
@@ -91,7 +94,7 @@ cdk deploy PipelineStack
 
 ### Step 4: Deploy Lakeformation permissions 
 
-You need to Grant permissions to the S3 Table using LakeFormation (LF) and the role. This will LF enough permission to access the S3 Tables namespace and tables
+Now, we need to Grant permissions to the S3 Table using LakeFormation (LF) and the role. This will give LF enough permission to access the S3 Tables namespace and tables
 
 ```
 cdk deploy LakeFormationStack
@@ -108,29 +111,31 @@ cdk deploy FirehoseStack
 
 You can access S3 tables from open source query engines by using the Amazon S3 Tables Catalog for Apache Iceberg client catalog. This means you need to create an Amazon EMR cluster with Apache Iceberg installed and initiate an [Apache Spark session](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-getting-started.html). Then, using Spark, you can create a namespace and a table in your table bucket, and add data to your table. You can either query your table within the Amazon EMR cluster or use Amazon Athena or Amazon Redshift to query your table.
 
-Currently S3 Tables does not provide SDK/CLI capabilities to create a table with metadata & columns in it directy. The table (streamtable) created using CDK does not have any columns/attributes. Now, we will use the following steps to add metadata & columns to table (streamtable) instead of using an Apache Spark session.
+Currently S3 Tables does not provide SDK/CLI capabilities to create a table with metadata & columns in it directy. The table (streamtable or the name you have provided in cdk.context.json) created using CDK does not have any columns/attributes. Now, we will use the following steps to add metadata & columns to table (streamtable or the name you have provided) instead of using an Apache Spark session.
 
 Ensure that the principal (User or Role) has permissions to access the below AWS resources to complete the remaining steps : 
 - S3 Tables
 - Glue 
 - Athena 
 
-Also grant lakeformation permissions to the principal (User or Role) that needs to query the table. (Update the account id and user)
+Also grant lakeformation permissions to the principal (User or Role) that needs to query the table. (Update the account id at 2 places and user)
 
 ```
-aws lakeformation grant-permissions \
-  --principal '{"DataLakePrincipalIdentifier": "arn:aws:iam::123456789012:user/johndoe"}' \
-  --resource '{"Table": {"CatalogId": "123456789012:s3tablescatalog/streamtablebucket", "DatabaseName": "streamnamespace", "Name": "streamtable"}}' \
-  --permissions SELECT DESCRIBE 
+aws lakeformation grant-permissions --principal '{"DataLakePrincipalIdentifier": "arn:aws:iam::<<123456789012>>:user/<<johndoe>>"}' --resource '{"Table": {"CatalogId": "<<123456789012>>:s3tablescatalog/streamtablebucket", "DatabaseName": "streamnamespace", "Name": "streamtable"}}' --permissions SELECT DESCRIBE 
 ```
-You have two options to update the metadata: 
-1. Using the automated script :  scripts/update_metadata.py
+#### 2 Options to update the metadata: 
+*Option 1. Automated*
+
+Using the automated script :  scripts/update_metadata.py
 Note : Update the variable 'athena_output_location' before running the script. 
 ```
 python3 scripts/update_metadata.py
 ```
+#### If you have run the above scripts, Go to Step 7
 
-2. Manually by following the below steps using CLI. 
+*Option 2. Manual Steps*
+
+Manually by following the below steps using AWS CLI. 
 
 Navigate to AWS CloudShell and follow the steps below:
 
@@ -176,21 +181,33 @@ Now, check the table (streamtable) in the Athena console and we will be able to 
 Let us insert some items into the DynamoDB Table using the following command. 
 
 ```
-aws dynamodb put-item \
-    --table-name sourcetable  \
-    --item \
-        '{"id": {"S": "1000"}, "name": {"S": "dynamo"}}'
+aws dynamodb put-item --table-name sourcetable --item '{"id": {"S": "1000"}, "name": {"S": "dynamo"}}'
 
 ```
 
 ### Step 8: Verify the streamed data
-Using Athena Console or CLI you can query the streamed data from S3 Tables (streamtable)
+Using Athena Console or CLI you can query the streamed data from S3 Tables (streamtable). Replace the workgroup with the name in your setup. Also, ensure that workgroup has setup an output location (S3 bucket). Alternatively you can also provide the output location as part of the below query at the end like --result-configuration "OutputLocation=s3://your-bucket/query-results/"
 
 ```
-aws athena start-query-execution \
-    --query-string "SELECT * FROM streamtable limit 10" \
-    --work-group "AthenaAdmin" \
-    --query-execution-context Database=streamnamespace,Catalog=s3tablecatalog/streamtablebucket Datasource=AwsDataCatalog
+aws athena start-query-execution --query-string "SELECT * FROM \"s3tablescatalog/streamtablebucket\".\"streamnamespace\".\"streamtable\"" --work-group "propdata" --query-execution-context "Database=streamnamespace,Catalog=AwsDataCatalog"
+
+```
+Note the QueryExecutionId from the ouput of the above query and run the following query to see the content of the query
+    {
+        "QueryExecutionId": "08cf4d54-b66a-448a-a62d-a4ca0cd7fb86"
+    }
+
+```
+aws athena get-query-results --query-execution-id 0441f638-41c5-42d6-93e4-c8c3e750b7d5 --output json
+```
+
+Alternatively, if you have access to the Athena console, you can run the query after choosing the appropriate Data source, Catalog and Database. In this example, it would be the following:
+Data source: AwsDataCatalog
+Catalog: s3tablescatalog/streamtablebucket
+Database: streamnamespace
+
+```
+SELECT * FROM streamnamespace.streamtable
 ```
 
 Now you can run your transactional anlytics queries against your S3 Tables. 
