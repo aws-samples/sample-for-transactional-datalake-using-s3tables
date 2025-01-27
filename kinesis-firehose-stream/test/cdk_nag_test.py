@@ -17,8 +17,8 @@ def create_test_stack(stack_class, stack_name):
     app = App(
         context={
             "table_bucket_name": "streamtablebucket",
-            "table_name": "streamtable",
-            "namespace": "streamnamespace",
+            "table_name": "transactions",
+            "namespace": "analytics",
             "bucket_name": "streambucket",
         }
     )

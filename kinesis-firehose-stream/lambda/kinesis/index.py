@@ -19,7 +19,7 @@ def handler(event, context):
             kinesis_client.put_record(
                 StreamName=KINESIS_STREAM_NAME,
                 Data=json.dumps(item),
-                PartitionKey=item["id"],
+                PartitionKey=item["transaction_id"],
             )
 
     return {

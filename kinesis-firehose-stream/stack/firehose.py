@@ -53,7 +53,7 @@ class FirehoseStack(Stack):
                     firehose.CfnDeliveryStream.DestinationTableConfigurationProperty(
                         destination_table_name=table_name,
                         destination_database_name=resource_link_arn,
-                        unique_keys=["id"],
+                        unique_keys=["transaction_id"],
                     )
                 ],
                 cloud_watch_logging_options=firehose.CfnDeliveryStream.CloudWatchLoggingOptionsProperty(

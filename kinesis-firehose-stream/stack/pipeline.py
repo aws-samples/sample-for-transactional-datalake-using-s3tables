@@ -28,11 +28,17 @@ class PipelineStack(Stack):
         # Step 1 : Create DynamoDB table with stream enabled
         dynamodb_table = dynamodb.Table(
             self,
-            "sourcetable",
-            table_name="sourcetable",
+            "financial-transactions",
+            table_name="financial-transactions",
             partition_key=dynamodb.Attribute(
-                name="id", type=dynamodb.AttributeType.STRING
+                name="transaction_id", type=dynamodb.AttributeType.STRING
             ),
+            sort_key=dynamodb.Attribute(
+                name="timestamp", type=dynamodb.AttributeType.NUMBER
+            ),
+            billing_mode=dynamodb.BillingMode.PROVISIONED,
+            read_capacity=10,
+            write_capacity=10,
             stream=dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
             removal_policy=cdk.RemovalPolicy.DESTROY,  # Use with caution in production
             point_in_time_recovery=True,

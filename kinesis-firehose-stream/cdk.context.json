@@ -1,6 +1,6 @@
 {
   "table_bucket_name": "streamtablebucket",
-  "table_name": "streamtable",
-  "namespace": "streamnamespace",
+  "table_name": "transactions",
+  "namespace": "analytics",
   "bucket_name": "streanbucket"
 }

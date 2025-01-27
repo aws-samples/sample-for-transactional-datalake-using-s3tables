@@ -8,7 +8,7 @@ from botocore.exceptions import ClientError
 # permissions to the principal (User or Role) that to query the table.
 # aws lakeformation grant-permissions \
 #   --principal '{"DataLakePrincipalIdentifier": "arn:aws:iam::123456789012:user/johndoe"}' \
-#   --resource '{"Table": {"CatalogId": "123456789012:s3tablescatalog/streamtablebucket", "DatabaseName": "streamnamespace", "Name": "streamtable"}}' \
+#   --resource '{"Table": {"CatalogId": "123456789012:s3tablescatalog/streamtablebucket", "DatabaseName": "analytics", "Name": "transactions"}}' \
 #   --permissions SELECT DESCRIBE
 
 
@@ -23,8 +23,10 @@ class UpdateMetadata:
         self.region = boto3.Session().region_name
 
         self.table_bucket_name = "streamtablebucket"  # HARD CODED - Update if required
-        self.temp_table_name = "temptable"  # HARD CODED - Update if requird
-        self.athena_output_location = f"s3://update-bucket-name/"  # HARD CODED - Update before running this script
+        self.namespace = "analytics"  # HARD CODED - Update if required
+        self.table = "transactions"  # HARD CODED - Update if required
+        self.temp_table = "temptable"  # HARD CODED - Update if requird
+        self.athena_output_location = f"s3://bucket-name/query-results/"  # HARD CODED - Update before running this script
 
     def get_table_bucket_arn(self):
         try:
@@ -57,18 +59,59 @@ class UpdateMetadata:
     # Currently DDLs for S3 tables are supported only from Apache Spark Clients (Glue/EMR)
     # We are using this workaround to avoid using Glue or EMR. The hack is to create a temporary ICEBERG table with desired schema.
     # Extract the warehouse_location and metadata JSON from the temporary table and update it to the S3 Table.
-    def update_metadata(self, namespace, table_name):
+    def update_metadata(self):
 
         response = self.s3tables.get_table(
             tableBucketARN=self.get_table_bucket_arn(),
-            namespace=namespace,
-            name=table_name,
+            namespace=self.namespace,
+            name=self.table,
         )
         warehouse_location = response["warehouseLocation"]
         version_token = response["versionToken"]
 
+        # query = f"""
+        # CREATE TABLE IF NOT EXISTS default.{self.temp_table_name}(id string, name string)
+        # LOCATION '{warehouse_location}'
+        # TBLPROPERTIES ( 'table_type'= 'ICEBERG' )
+        # """
+
         query = f"""
-        CREATE TABLE IF NOT EXISTS default.{self.temp_table_name}(id string, name string)
+        CREATE TABLE IF NOT EXISTS default.{self.temp_table} (
+            -- Primary identifiers
+            transaction_id STRING,
+            timestamp BIGINT,
+            customer_id STRING,
+            
+            -- Transaction details
+            date DATE,
+            hour INT,
+            minute INT,
+            transaction_type STRING,
+            amount DECIMAL(12,2),
+            currency STRING,
+            merchant_category STRING,
+            payment_method STRING,
+            region STRING,
+            risk_score STRING,
+            status STRING,
+            processing_timestamp BIGINT,
+            
+            -- Transaction metadata
+            transaction_metadata STRUCT<
+                device_type: STRING,
+                authentication_method: STRING,
+                merchant_id: STRING
+            >,
+            
+            -- Fraud indicators
+            fraud_indicators STRUCT<
+                velocity_check: STRING,
+                amount_threshold: STRING,
+                location_risk: STRING,
+                pattern_match: STRING
+            >
+        )
+        PARTITIONED BY (date)
         LOCATION '{warehouse_location}'
         TBLPROPERTIES ( 'table_type'= 'ICEBERG' )
         """
@@ -79,30 +122,28 @@ class UpdateMetadata:
         )
         status = self._wait_for_athena_query(response["QueryExecutionId"])
         if status == "SUCCEEDED":
-            print(f"Created table '{self.temp_table_name}' in database 'default'")
+            print(f"Created table '{self.temp_table}' in database 'default'")
 
         response = self.glue.get_table(
             CatalogId=self.account_id,
             DatabaseName="default",
-            Name=self.temp_table_name,
+            Name=self.temp_table,
         )
 
         metadata_location = response["Table"]["Parameters"]["metadata_location"]
 
         response = self.s3tables.update_table_metadata_location(
             tableBucketARN=self.get_table_bucket_arn(),
-            namespace=namespace,
-            name=table_name,
+            namespace=self.namespace,
+            name=self.table,
             versionToken=version_token,
             metadataLocation=metadata_location,
         )
         print(f"Updated table metadata location.")
 
         # drop the temp table
-        response = self.glue.delete_table(
-            DatabaseName="default", Name=self.temp_table_name
-        )
-        print(f"Deleted table '{self.temp_table_name}' from database 'default'")
+        response = self.glue.delete_table(DatabaseName="default", Name=self.temp_table)
+        print(f"Deleted table '{self.temp_table}' from database 'default'")
 
         print(f"Update complete. ")
 
@@ -113,12 +154,10 @@ def main():
 
     try:
         print(f"Updating metadata....")
-        table_name = "streamtable"
-        namespace = "streamnamespace"
 
-        update.update_metadata(namespace, table_name)
+        update.update_metadata()
 
-        print(f"Successfully updated metadata for streamtable {u'\u2713'}")
+        print(f"Successfully updated metadata {u'\u2713'}")
 
     except Exception as e:
         print(f"Failed to Update metadata: {e}")
