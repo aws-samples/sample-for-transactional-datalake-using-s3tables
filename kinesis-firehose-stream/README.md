@@ -233,7 +233,7 @@ python3 scripts/create_sample_data.py
 ```
 
 ### Step 8: Verify the streamed data
-Using Athena Console or CLI you can query the streamed data from S3 Tables (transactions). Replace the workgroup with the name in your setup. Also, ensure that workgroup has already setup an output location (S3 bucket). Alternatively you can also provide the output location as part of the below query at the end like --result-configuration "OutputLocation=s3://your-bucket/query-results/". Please make sure the user has the permission to write to the S3 bucket.
+Using Athena Console or CLI you can query the streamed data from S3 Tables (transactions). Replace the 'work-group' value with the name in your setup. Also, ensure that workgroup has already setup an output location (S3 bucket). Alternatively you can also provide the output location as part of the below query at the end like --result-configuration "OutputLocation=s3://your-bucket/query-results/". Please make sure the user has the permission to write to the S3 bucket.
 
 ```
 aws athena start-query-execution \

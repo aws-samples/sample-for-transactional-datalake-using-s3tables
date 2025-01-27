@@ -97,8 +97,25 @@ class PipelineStack(Stack):
             ],
         )
 
+        cloudwatch_write_policy = iam.ManagedPolicy(
+            self,
+            "CloudWatchWritePolicy",
+            statements=[
+                iam.PolicyStatement(
+                    effect=iam.Effect.ALLOW,
+                    actions=[
+                        "logs:CreateLogGroup",
+                        "logs:CreateLogStream",
+                        "logs:PutLogEvents",
+                    ],
+                    resources=["*"],
+                )
+            ],
+        )
+
         lambda_role.add_managed_policy(dynamo_stream_policy)
         lambda_role.add_managed_policy(kinesis_write_policy)
+        lambda_role.add_managed_policy(cloudwatch_write_policy)
 
         # Step 3: Create Lambda function to process DynamoDB stream and send to Kinesis
         dynamo_to_kinesis_lambda = lambda_.Function(
@@ -109,6 +126,7 @@ class PipelineStack(Stack):
             code=lambda_.Code.from_asset("lambda/kinesis"),
             environment={"KINESIS_STREAM_NAME": kinesis_stream.stream_name},
             role=lambda_role,
+            timeout=cdk.Duration.seconds(180),
         )
 
         event_source = lambda_.EventSourceMapping(

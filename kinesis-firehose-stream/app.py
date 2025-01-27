@@ -21,6 +21,7 @@ lakeformation_stack = LakeFormationStack(
     app,
     "LakeFormationStack",
 )
+lakeformation_stack.add_dependency(pipeline_stack)
 
 firehose_stack = FirehoseStack(
     app,
