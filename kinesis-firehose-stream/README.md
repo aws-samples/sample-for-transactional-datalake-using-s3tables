@@ -77,7 +77,7 @@ We will create the following table bucket, table, namespace and S3 bucket. For c
   "table_bucket_name": "streamtablebucket",
   "table_name": "transactions",
   "namespace": "analytics",
-  "bucket_name": "streanbucket"
+  "bucket_name": "streambucket"
 }
 ```
 

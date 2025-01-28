@@ -2,5 +2,5 @@
   "table_bucket_name": "streamtablebucket",
   "table_name": "transactions",
   "namespace": "analytics",
-  "bucket_name": "streanbucket"
+  "bucket_name": "streambucket"
 }
