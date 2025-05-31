@@ -2,5 +2,6 @@
   "table_bucket_name": "streamtablebucket",
   "table_name": "transactions",
   "namespace": "analytics",
-  "bucket_name": "streambucket"
+  "bucket_name": "streambucket",
+  "stream_type": "dynamodb"
 }
