@@ -17,15 +17,13 @@ class LakeFormationStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        # kinesis_stream = props["kinesis_stream"]
-        kinesis_stream_arn = cdk.Fn.import_value("KinesisStreamARN")
-
         # Read context values
         table_bucket_name = self.node.try_get_context("table_bucket_name")
         table_name = self.node.try_get_context("table_name")
         namespace = self.node.try_get_context("namespace")
+        stream_type = self.node.try_get_context("stream_type")
 
-        # Step 1 : Get the CDK deployment role, add permissions and register as Lakeformation Administrator
+        # Get the CDK deployment role, add permissions and register as Lakeformation Administrator
         cdk_role = iam.Role.from_role_arn(
             self,
             "CDKRole",
@@ -51,9 +49,7 @@ class LakeFormationStack(Stack):
                     "lakeformation:GrantPermissions",
                     "lakeformation:RevokePermissions",
                 ],
-                resources=[
-                    "*"
-                ],
+                resources=["*"],
             )
         )
 
@@ -69,26 +65,30 @@ class LakeFormationStack(Stack):
         )
         admin_settings.node.add_dependency(cdk_role)
 
-        # Step 2: Create IAM role & permissions for Firehose
+        # Create IAM role & permissions for Firehose
         firehose_role = iam.Role(
             self,
             "FirehoseRole",
             assumed_by=iam.ServicePrincipal("firehose.amazonaws.com"),
         )
 
-        # Add explicit permissions for Kinesis operations
-        firehose_role.add_to_policy(
-            iam.PolicyStatement(
-                effect=iam.Effect.ALLOW,
-                actions=[
-                    "kinesis:DescribeStream",
-                    "kinesis:GetShardIterator",
-                    "kinesis:GetRecords",
-                    "kinesis:ListShards",
-                ],
-                resources=[kinesis_stream_arn],
+        if stream_type == "kinesis":
+            # Import Kinesis stream ARN from Pipeline stack
+            kinesis_stream_arn = cdk.Fn.import_value("KinesisStreamARN")
+
+            # Add explicit permissions for Kinesis operations
+            firehose_role.add_to_policy(
+                iam.PolicyStatement(
+                    effect=iam.Effect.ALLOW,
+                    actions=[
+                        "kinesis:DescribeStream",
+                        "kinesis:GetShardIterator",
+                        "kinesis:GetRecords",
+                        "kinesis:ListShards",
+                    ],
+                    resources=[kinesis_stream_arn],
+                )
             )
-        )
 
         # Add CloudWatch Logs permissions
         firehose_role.add_to_policy(
@@ -103,15 +103,23 @@ class LakeFormationStack(Stack):
             )
         )
 
-        # Add S3 Tables Glue Federation Permissions as per documentation - 
+        # Add Lambda invoke permissions for Firehose
+        firehose_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=["lambda:InvokeFunction", "lambda:GetFunctionConfiguration"],
+                resources=["*"],
+            )
+        )
+
+        # Add S3 Tables Glue Federation Permissions as per documentation -
         # https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-integrating-firehose.html
-    
         firehose_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=["glue:GetTable", "glue:GetDatabase", "glue:UpdateTable"],
                 resources=[
-                    f"arn:aws:glue:{Stack.of(self).region}:{Stack.of(self).account}:catalog/s3tablescatalog/*",  
+                    f"arn:aws:glue:{Stack.of(self).region}:{Stack.of(self).account}:catalog/s3tablescatalog/*",
                     f"arn:aws:glue:{Stack.of(self).region}:{Stack.of(self).account}:catalog/s3tablescatalog",
                     f"arn:aws:glue:{Stack.of(self).region}:{Stack.of(self).account}:catalog",
                     f"arn:aws:glue:{Stack.of(self).region}:{Stack.of(self).account}:database/*",
@@ -126,9 +134,7 @@ class LakeFormationStack(Stack):
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=["lakeformation:GetDataAccess"],
-                resources=[
-                    "*"
-                ], 
+                resources=["*"],
             )
         )
 
@@ -162,7 +168,7 @@ class LakeFormationStack(Stack):
             )
         )
 
-        # Step : Create the resource link
+        # Create the resource link
         resource_link = glue.CfnDatabase(
             self,
             "ResourceLink",
@@ -191,7 +197,7 @@ class LakeFormationStack(Stack):
             permissions=["ALL"],
         )
 
-        #  GRANT permission to resource link
+        #  Grant permission to resource link
         lf_permissions_resource_link = lakeformation.CfnPermissions(
             self,
             "GrantPermissionsToResourceLink",

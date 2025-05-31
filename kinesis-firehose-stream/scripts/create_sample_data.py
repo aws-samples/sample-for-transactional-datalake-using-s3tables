@@ -40,6 +40,16 @@ class CreateSampleData:
 
         regions = ["US_EAST", "US_WEST", "EU", "APAC"]
 
+        # Generate values for what used to be nested fields
+        device_type = random.choice(["MOBILE", "WEB", "POS", "ATM"])
+        authentication_method = random.choice(["2FA", "BIOMETRIC", "PIN", "PASSWORD"])
+        merchant_id = f"MERCH_{random.randint(1, 1000):04d}"
+
+        velocity_check = random.choice(["PASS", "FLAG", "REVIEW"])
+        amount_threshold = random.choice(["NORMAL", "HIGH", "VERY_HIGH"])
+        location_risk = random.choice(["LOW", "MEDIUM", "HIGH"])
+        pattern_match = random.choice(["NORMAL", "SUSPICIOUS"])
+
         return {
             "transaction_id": f"TXN_{uuid.uuid4().hex[:16]}",
             "timestamp": int(timestamp.timestamp() * 1000),
@@ -54,19 +64,15 @@ class CreateSampleData:
             "payment_method": random.choice(payment_methods),
             "region": random.choice(regions),
             "risk_score": random.choice(risk_scores),
-            "transaction_metadata": {
-                "device_type": random.choice(["MOBILE", "WEB", "POS", "ATM"]),
-                "authentication_method": random.choice(
-                    ["2FA", "BIOMETRIC", "PIN", "PASSWORD"]
-                ),
-                "merchant_id": f"MERCH_{random.randint(1, 1000):04d}",
-            },
-            "fraud_indicators": {
-                "velocity_check": random.choice(["PASS", "FLAG", "REVIEW"]),
-                "amount_threshold": random.choice(["NORMAL", "HIGH", "VERY_HIGH"]),
-                "location_risk": random.choice(["LOW", "MEDIUM", "HIGH"]),
-                "pattern_match": random.choice(["NORMAL", "SUSPICIOUS"]),
-            },
+            # Flattened transaction_metadata fields
+            "device_type": device_type,
+            "authentication_method": authentication_method,
+            "merchant_id": merchant_id,
+            # Flattened fraud_indicators fields
+            "velocity_check": velocity_check,
+            "amount_threshold": amount_threshold,
+            "location_risk": location_risk,
+            "pattern_match": pattern_match,
             "status": random.choice(
                 ["APPROVED", "DECLINED", "PENDING_REVIEW", "FLAGGED"]
             ),

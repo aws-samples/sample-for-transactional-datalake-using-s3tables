@@ -4,6 +4,7 @@ from aws_cdk import (
     Stack,
     aws_dynamodb as dynamodb,
     aws_kinesis as kinesis,
+    aws_kinesisfirehose as firehose,
     aws_lambda as lambda_,
     aws_lambda_event_sources as lambda_events,
     aws_iam as iam,
@@ -23,123 +24,60 @@ class PipelineStack(Stack):
         table_bucket_name = self.node.try_get_context("table_bucket_name")
         table_name = self.node.try_get_context("table_name")
         namespace = self.node.try_get_context("namespace")
-        bucket_name = f"{self.node.try_get_context("bucket_name")}-{self.account}"
+        bucket_name = f"{self.node.try_get_context('bucket_name')}-{self.account}"
+        stream_type = self.node.try_get_context("stream_type")
 
-        # Step 1 : Create DynamoDB table with stream enabled
-        dynamodb_table = dynamodb.Table(
-            self,
-            "financial-transactions",
-            table_name="financial-transactions",
-            partition_key=dynamodb.Attribute(
-                name="transaction_id", type=dynamodb.AttributeType.STRING
-            ),
-            sort_key=dynamodb.Attribute(
-                name="timestamp", type=dynamodb.AttributeType.NUMBER
-            ),
-            billing_mode=dynamodb.BillingMode.PROVISIONED,
-            read_capacity=10,
-            write_capacity=10,
-            stream=dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
-            removal_policy=cdk.RemovalPolicy.DESTROY,  # Use with caution in production
-            point_in_time_recovery=True,
-        )
-        ## update removal policy in kinesis data streams
+        # Create the resources based on the stream type
+        if stream_type == "kinesis":
+            # First create Kinesis Data Stream
+            kinesis_stream = kinesis.Stream(
+                self,
+                "MyKinesisStream",
+                stream_mode=kinesis.StreamMode.ON_DEMAND,
+                encryption=kinesis.StreamEncryption.MANAGED,
+            )
+            kinesis_stream.apply_removal_policy(RemovalPolicy.DESTROY)
 
-        # Step 2: Create Kinesis Data Stream
-        kinesis_stream = kinesis.Stream(
-            self,
-            "MyKinesisStream",
-            stream_mode=kinesis.StreamMode.ON_DEMAND,
-            encryption=kinesis.StreamEncryption.MANAGED,  # AwsSolutions-KDS3
-        )
-        kinesis_stream.apply_removal_policy(RemovalPolicy.DESTROY)
-
-        # Create Lambda execution role
-        lambda_role = iam.Role(
-            self,
-            "DynamoToKinesisLambdaRole",
-            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
-            description="Execution role for DynamoDB to Kinesis Lambda function",
-        )
-
-        # Create customer managed policy for DynamoDB stream access
-        dynamo_stream_policy = iam.ManagedPolicy(
-            self,
-            "DynamoStreamReadPolicy",
-            statements=[
-                iam.PolicyStatement(
-                    effect=iam.Effect.ALLOW,
-                    actions=[
-                        "dynamodb:GetRecords",
-                        "dynamodb:GetShardIterator",
-                        "dynamodb:DescribeStream",
-                    ],
-                    resources=[dynamodb_table.table_stream_arn],
+            # Then create DynamoDB table with Kinesis integration
+            dynamodb_table = dynamodb.Table(
+                self,
+                "financial-transactions",
+                table_name="financial-transactions",
+                partition_key=dynamodb.Attribute(
+                    name="transaction_id", type=dynamodb.AttributeType.STRING
                 ),
-                iam.PolicyStatement(
-                    effect=iam.Effect.ALLOW,
-                    actions=["dynamodb:ListStreams"],
-                    resources=[dynamodb_table.table_arn],
+                sort_key=dynamodb.Attribute(
+                    name="timestamp", type=dynamodb.AttributeType.NUMBER
                 ),
-            ],
-        )
+                billing_mode=dynamodb.BillingMode.PROVISIONED,
+                read_capacity=10,
+                write_capacity=10,
+                kinesis_stream=kinesis_stream,
+                removal_policy=cdk.RemovalPolicy.DESTROY,
+                point_in_time_recovery=True,
+            )
 
-        # Create customer managed policy for Kinesis write access
-        kinesis_write_policy = iam.ManagedPolicy(
-            self,
-            "KinesisWritePolicy",
-            statements=[
-                iam.PolicyStatement(
-                    effect=iam.Effect.ALLOW,
-                    actions=["kinesis:PutRecord", "kinesis:PutRecords"],
-                    resources=[kinesis_stream.stream_arn],
-                )
-            ],
-        )
+        else:  # stream_type == "dynamodb"
+            # First create DynamoDB table with streams enabled
+            dynamodb_table = dynamodb.Table(
+                self,
+                "financial-transactions",
+                table_name="financial-transactions",
+                partition_key=dynamodb.Attribute(
+                    name="transaction_id", type=dynamodb.AttributeType.STRING
+                ),
+                sort_key=dynamodb.Attribute(
+                    name="timestamp", type=dynamodb.AttributeType.NUMBER
+                ),
+                billing_mode=dynamodb.BillingMode.PROVISIONED,
+                read_capacity=10,
+                write_capacity=10,
+                stream=dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
+                removal_policy=cdk.RemovalPolicy.DESTROY,
+                point_in_time_recovery=True,
+            )
 
-        cloudwatch_write_policy = iam.ManagedPolicy(
-            self,
-            "CloudWatchWritePolicy",
-            statements=[
-                iam.PolicyStatement(
-                    effect=iam.Effect.ALLOW,
-                    actions=[
-                        "logs:CreateLogGroup",
-                        "logs:CreateLogStream",
-                        "logs:PutLogEvents",
-                    ],
-                    resources=["*"],
-                )
-            ],
-        )
-
-        lambda_role.add_managed_policy(dynamo_stream_policy)
-        lambda_role.add_managed_policy(kinesis_write_policy)
-        lambda_role.add_managed_policy(cloudwatch_write_policy)
-
-        # Step 3: Create Lambda function to process DynamoDB stream and send to Kinesis
-        dynamo_to_kinesis_lambda = lambda_.Function(
-            self,
-            "DynamoToKinesisLambda",
-            runtime=lambda_.Runtime.PYTHON_3_13,
-            handler="index.handler",
-            code=lambda_.Code.from_asset("lambda/kinesis"),
-            environment={"KINESIS_STREAM_NAME": kinesis_stream.stream_name},
-            role=lambda_role,
-            timeout=cdk.Duration.seconds(180),
-        )
-
-        event_source = lambda_.EventSourceMapping(
-            self,
-            "DynamoStreamEventSource",
-            event_source_arn=dynamodb_table.table_stream_arn,
-            target=dynamo_to_kinesis_lambda,
-            starting_position=lambda_.StartingPosition.TRIM_HORIZON,
-            batch_size=100,
-            enabled=True,
-        )
-
-        # Step 4: Create Lambda Layer, Lambda function to interact with S3 tables APIs
+        # Create Lambda Layer, Lambda function to interact with S3 tables APIs
         # boto3 layer to override default version in Lambda to enable support for s3tables APIs
         boto3_layer = lambda_.LayerVersion(
             self,
@@ -164,22 +102,10 @@ class PipelineStack(Stack):
             )
         )
 
-        # Add policies for S3 Table access
         manage_s3_table_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
-                actions=[
-                    "s3tables:CreateTable",
-                    "s3tables:DeleteTable",
-                    "s3tables:GetTable",
-                    "s3tables:ListTables",
-                    "s3tables:CreateTableBucket",
-                    "s3tables:CreateNamespace",
-                    "s3tables:UpdateTableMetadataLocation",
-                    "s3tables:ListTableBuckets",
-                    "s3tables:DeleteNamespace",
-                    "s3tables:DeleteTableBucket",
-                ],
+                actions=["s3tables:*"],
                 resources=[
                     f"arn:aws:s3tables:{Stack.of(self).region}:{Stack.of(self).account}:bucket/{table_bucket_name}",
                     f"arn:aws:s3tables:{Stack.of(self).region}:{Stack.of(self).account}:bucket/{table_bucket_name}/*",
@@ -200,7 +126,7 @@ class PipelineStack(Stack):
             role=manage_s3_table_role,  # Assign the role to the Lambda function
         )
 
-        # Step 5: Create Custom Resource to invoke Lambda
+        # Create Custom Resource to invoke Lambda
         s3_table_custom_resource = cr.AwsCustomResource(
             self,
             "S3TableCustomResource",
@@ -256,10 +182,31 @@ class PipelineStack(Stack):
         # Ensure Custom Resource is created after the Lambda and Bucket
         s3_table_custom_resource.node.add_dependency(manage_s3_table_lambda)
 
-        # Add CfnOutput
+        # Add CfnOutput for DynamoDB table
         CfnOutput(
             self,
-            "KinesisStreamARN",
-            value=kinesis_stream.stream_arn,
-            export_name="KinesisStreamARN",
+            "DynamoDBTableName",
+            value=dynamodb_table.table_name,
+            export_name="DynamoDBTableName",
         )
+        CfnOutput(
+            self,
+            "DynamoDBTableARN",
+            value=dynamodb_table.table_arn,
+            export_name="DynamoDBTableARN",
+        )
+
+        if stream_type == "kinesis":
+            CfnOutput(
+                self,
+                "KinesisStreamARN",
+                value=kinesis_stream.stream_arn,
+                export_name="KinesisStreamARN",
+            )
+        else:
+            CfnOutput(
+                self,
+                "DynamoDBTableStreamARN",
+                value=dynamodb_table.table_stream_arn,
+                export_name="DynamoDBTableStreamARN",
+            )

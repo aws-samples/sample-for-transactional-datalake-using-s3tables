@@ -88,6 +88,40 @@ def create_table(
             namespace=namespace[0],
             name=table_name,
             format="ICEBERG",
+            metadata={
+                "iceberg": {
+                    "schema": {
+                        "fields": [
+                            {
+                                "name": "transaction_id",
+                                "type": "string",
+                                "required": True,
+                            },
+                            {"name": "timestamp", "type": "long"},
+                            {"name": "customer_id", "type": "string"},
+                            {"name": "date", "type": "date"},
+                            {"name": "hour", "type": "int"},
+                            {"name": "minute", "type": "int"},
+                            {"name": "transaction_type", "type": "string"},
+                            {"name": "amount", "type": "decimal(12,2)"},
+                            {"name": "currency", "type": "string"},
+                            {"name": "merchant_category", "type": "string"},
+                            {"name": "payment_method", "type": "string"},
+                            {"name": "region", "type": "string"},
+                            {"name": "risk_score", "type": "string"},
+                            {"name": "status", "type": "string"},
+                            {"name": "processing_timestamp", "type": "long"},
+                            {"name": "device_type", "type": "string"},
+                            {"name": "authentication_method", "type": "string"},
+                            {"name": "merchant_id", "type": "string"},
+                            {"name": "velocity_check", "type": "string"},
+                            {"name": "amount_threshold", "type": "string"},
+                            {"name": "location_risk", "type": "string"},
+                            {"name": "pattern_match", "type": "string"},
+                        ]
+                    }
+                }
+            },
         )
 
         print(f"S3 Table '{table_name}' created successfully")
@@ -117,7 +151,7 @@ def delete_table(s3tables, table_bucket_name, namespace, table_name):
                 break
         print(namespace)
 
-        #Step 1: Delete the table
+        # Step 1: Delete the table
         response = s3tables.delete_table(
             tableBucketARN=table_bucket_arn,
             namespace=namespace[0],
@@ -126,7 +160,9 @@ def delete_table(s3tables, table_bucket_name, namespace, table_name):
         print(f"Deleted table {table_name} in namespace {namespace}")
 
         # Step 2: Delete the namespace
-        s3tables.delete_namespace(tableBucketARN=table_bucket_arn, namespace=namespace[0])
+        s3tables.delete_namespace(
+            tableBucketARN=table_bucket_arn, namespace=namespace[0]
+        )
         print(f"Deleted namespace {namespace}")
 
         # Step 3: Delete the table bucket
