@@ -1,0 +1,103 @@
+{
+    "tableBucketARN": "arn:aws:s3tables:<<region>>:<<account-id>>:bucket/streamtablebucket",
+    "namespace": "analytics",
+    "name": "transactions",
+    "format": "ICEBERG",
+    "metadata": {
+        "iceberg": {
+            "schema": {
+                "fields": [
+                    {
+                        "name": "transaction_id",
+                        "type": "string",
+                        "required": true
+                    },
+                    {
+                        "name": "timestamp",
+                        "type": "long"
+                    },
+                    {
+                        "name": "customer_id",
+                        "type": "string"
+                    },
+                    {
+                        "name": "date",
+                        "type": "date"
+                    },
+                    {
+                        "name": "hour",
+                        "type": "int"
+                    },
+                    {
+                        "name": "minute",
+                        "type": "int"
+                    },
+                    {
+                        "name": "transaction_type",
+                        "type": "string"
+                    },
+                    {
+                        "name": "amount",
+                        "type": "decimal(12,2)"
+                    },
+                    {
+                        "name": "currency",
+                        "type": "string"
+                    },
+                    {
+                        "name": "merchant_category",
+                        "type": "string"
+                    },
+                    {
+                        "name": "payment_method",
+                        "type": "string"
+                    },
+                    {
+                        "name": "region",
+                        "type": "string"
+                    },
+                    {
+                        "name": "risk_score",
+                        "type": "string"
+                    },
+                    {
+                        "name": "status",
+                        "type": "string"
+                    },
+                    {
+                        "name": "processing_timestamp",
+                        "type": "long"
+                    },
+                    {
+                        "name": "device_type",
+                        "type": "string"
+                    },
+                    {
+                        "name": "authentication_method",
+                        "type": "string"
+                    },
+                    {
+                        "name": "merchant_id",
+                        "type": "string"
+                    },
+                    {
+                        "name": "velocity_check",
+                        "type": "string"
+                    },
+                    {
+                        "name": "amount_threshold",
+                        "type": "string"
+                    },
+                    {
+                        "name": "location_risk",
+                        "type": "string"
+                    },
+                    {
+                        "name": "pattern_match",
+                        "type": "string"
+                    }
+                ]
+            }
+        }
+    }
+}

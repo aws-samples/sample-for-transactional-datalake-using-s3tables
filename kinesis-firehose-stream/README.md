@@ -1,16 +1,24 @@
 # Stream DynamoDB data to S3 Tables using Kinesis Firehose Delivery
-This sample illustrates an approach on how to stream data from DynamoDB table to S3 Tables in near real-time using Amazon Kinesis Stream and Kinesis Firehose. Once the data is in S3 Tables, it can be queried using Athena for your analytics purposes. 
+This sample illustrates an approach on how to stream data from DynamoDB table to S3 Tables in near real-time using either DynamoDB Streams or Amazon Kinesis Data Streams with Kinesis Firehose. Once the data is in S3 Tables, it can be queried using Athena for your analytics purposes.
 
-![arch diagram](./diagrams/s3-tables-stream-architecture.png)
+### Using DynamoDB Streams
+![arch diagram](./diagrams/dynamodb_streams_arch.png)
+
+### Using Kinesis Streams
+![arch diagram](./diagrams/kinesis_streams_arch.png)
+
 
 ### Components
 List of AWS Services used in this sample
 - **S3 Tables**: This is the core and centre piece of this sample. Data is ingested through Firehose and then queried using Athena.
-- **Kinesis Firehose**: Receives the data from Kinesis Data Stream and pushes to S3 Tables
-- **Kinesis Stream**: Pushing the data from DynamoDB table to Kinesis Firehose
-- **DynamoDB**: Source database for streaming the data to S3 Tables. We will insert records in DynamoDB table which will flow through to S3 Tables via Kinesis Data Stream and Firehose
-- **Lambda**: Lambda is used for data formation and also for providing access to Lakeformation which allows Athena to access the namespace and 
-- **Athena**: This is used to query the data which are pushed to S3 Tables from DynamoDB via Kinesis Firehose and Data Streams.
+- **Kinesis Firehose**: Receives the data from either DynamoDB Streams or Kinesis Data Stream and pushes to S3 Tables
+- **Kinesis Data Stream**: Optional component that can be used for pushing the data from DynamoDB table to Kinesis Firehose
+- **DynamoDB**: Source database for streaming the data to S3 Tables. We will insert records in DynamoDB table which will flow through to S3 Tables via either DynamoDB Streams or Kinesis Data Stream and Firehose
+- **Lambda**: Several Lambda functions are used in the architecture:
+  - **Transform Lambda**: Processes and transforms data from Kinesis before it reaches Firehose (when using Kinesis Data Streams)
+  - **Firehose Lambda**: Processes DynamoDB Stream events and forwards them to Firehose (when using DynamoDB Streams)
+  - **Custom Resource Lambda**: Creates and manages S3 Table resources
+- **Athena**: This is used to query the data which are pushed to S3 Tables from DynamoDB via Kinesis Firehose.
 
 
 ### Clone the repo 
@@ -50,20 +58,7 @@ At this point, you can now synthesize the CloudFormation template for this code.
 ```
 cdk synth
 ```
-Note : If you encounter "RuntimeError: Cannot find module '@aws-cdk/cx-api'", then follow the below steps and run 'cdk synth' again: 
-```
-# Remove existing CDK packages
-pip uninstall aws-cdk.cx-api aws-cdk-lib -y
 
-# Clear pip cache
-pip cache purge
-
-# Reinstall dependencies
-pip install -r requirements.txt
-
-# Run cdk synth again
-cdk synth
-```
 Bootstrap your CDK env to the desired AWS account and [region where S3 Tables is available](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-regions-quotas.html)
 
 ```
@@ -77,19 +72,27 @@ We will create the following table bucket, table, namespace and S3 bucket. For c
   "table_bucket_name": "streamtablebucket",
   "table_name": "transactions",
   "namespace": "analytics",
-  "bucket_name": "streambucket"
+  "bucket_name": "streambucket",
+  "stream_type": "dynamodb"
 }
 ```
 
-Next let us provison all the pipeline resources : 
-- DynamoDB table as source data
-- Lambda to process stream from DynamoDB
-- Kinesis Data Streams for near real time streaming.
-- Lambda as custom resource to create S3 Table Bucket, Namespace & Table. 
+The `stream_type` property determines which streaming architecture to deploy:
+- `kinesis`: Uses Kinesis Data Streams with a Lambda processor for data transformation
+- `dynamodb`: Uses DynamoDB Streams directly with a Lambda function to forward events to Firehose
+
+Next let us provision all the pipeline resources:
 
 ```
 cdk deploy PipelineStack
 ```
+
+This will create:
+- DynamoDB table as source data
+- Lambda as custom resource to create S3 Table Bucket, Namespace & Table
+- Based on the `stream_type` property in cdk.context.json:
+  - If `kinesis`: Creates a Kinesis Data Stream and configures DynamoDB to stream changes to it
+  - If `dynamodb`: Enables DynamoDB Streams on the table
 
 ### Step 4: Deploy Lakeformation permissions 
 
@@ -106,124 +109,13 @@ Create Firehose stream and push the data to S3 Table which are created in the ea
 cdk deploy FirehoseStack
 ```
 
-### Step 6: Update metadata location for the s3tables
+This will create:
+- Kinesis Firehose delivery stream configured to write to S3 Tables
+- Based on the `stream_type` property in cdk.context.json:
+  - If `kinesis`: Creates a Lambda function for transforming Kinesis data and configures Firehose to use Kinesis as source with this Lambda for data processing
+  - If `dynamodb`: Creates a Lambda function to process DynamoDB Stream events and forward them to Firehose using Direct PUT
 
-You can access S3 tables from open source query engines by using the Amazon S3 Tables Catalog for Apache Iceberg client catalog. This means you need to create an Amazon EMR cluster with Apache Iceberg installed and initiate an [Apache Spark session](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-getting-started.html). Then, using Spark, you can create a namespace and a table in your table bucket, and add data to your table. You can either query your table within the Amazon EMR cluster or use Amazon Athena or Amazon Redshift to query your table.
-
-Currently S3 Tables does not provide SDK/CLI capabilities to create a table with metadata & columns in it directy. The table (transaction or the name you have provided in cdk.context.json) created using CDK does not have any columns/attributes. Now, we will use the following steps to add metadata & columns to table (transactions or the name you have provided) instead of using an Apache Spark session.
-
-Ensure that the principal (User or Role) has permissions to access the below AWS resources to complete the remaining steps : 
-- S3 Tables
-- Glue 
-- Athena 
-
-Also grant lakeformation permissions to the principal (User or Role) that needs to query the table. (Update the account id at 2 places and user)
-
-```
-aws lakeformation grant-permissions 
-      --principal '{"DataLakePrincipalIdentifier": "arn:aws:iam::<<123456789012>>:user/<<johndoe>>"}' \
-      --resource '{"Table": {"CatalogId": "<<123456789012>>:s3tablescatalog/streamtablebucket", "DatabaseName": "analytics", "Name": "transactions"}}' \
-      --permissions SELECT DESCRIBE 
-```
-**There are TWO options to update the metadata:**
-<u>*Option 1: Automated using a script*</u>
-
-Note : Update the variable 'athena_output_location' before running the script. 
-```
-python3 scripts/update_metadata.py
-```
-#### If you have executed the above script, Go to Step 7
-
-<u>*Option 2: Manual Steps using AWS CLI*</u>
-
-Navigate to AWS CloudShell and follow the steps below:
-
-#### 6a: Get warehouse location & version token
-First we need to get the warehouse location of the table (transactions) we have created through CDK. Please replace the AWS Account ID and region in the following command:
-
-```
-aws s3tables get-table \
-    --table-bucket-arn arn:aws:s3tables:<<us-east-1>>:<<111111111111>>:bucket/streamtablebucket \
-    --namespace analytics \
-    --name transactions 
-```
-Note the following details:
-"warehouse_location": "s3://f063a63c-xxxx-xxxx-xxxxxxxxxxxxx--table-s3"
-"versionToken": "xxxxxxxxxxxxx"
-
-#### 6b: Create a temporary table
-Navigate to Athena and select "default" database. Now create a temp table with the desired definition. In this example, we have created a table (temptable) with the columns mapping the sample data that to be ingested into the source DynamoDB table. Change the schema as per your up-stream table that you are streaming from. 
-
-```
-CREATE TABLE IF NOT EXISTS default.temptable (
-            -- Primary identifiers
-            transaction_id STRING,
-            timestamp BIGINT,
-            customer_id STRING,
-            
-            -- Transaction details
-            date DATE,
-            hour INT,
-            minute INT,
-            transaction_type STRING,
-            amount DECIMAL(12,2),
-            currency STRING,
-            merchant_category STRING,
-            payment_method STRING,
-            region STRING,
-            risk_score STRING,
-            status STRING,
-            processing_timestamp BIGINT,
-            
-            -- Transaction metadata
-            transaction_metadata STRUCT<
-                device_type: STRING,
-                authentication_method: STRING,
-                merchant_id: STRING
-            >,
-            
-            -- Fraud indicators
-            fraud_indicators STRUCT<
-                velocity_check: STRING,
-                amount_threshold: STRING,
-                location_risk: STRING,
-                pattern_match: STRING
-            >
-        )
-        PARTITIONED BY (date)
-        LOCATION '<<warehouse_location>>'
-        TBLPROPERTIES ( 'table_type'= 'ICEBERG' )
-
-```
-
-#### 6c: Get Table metadata location
-Navigate to CloudShell. Lets get the metadata location of the temporary table 'default.temptable'.
-
-```
-aws glue get-table \
-  --catalog-id <<AWS-ACCOUNT-ID>> \
-  --database-name default \
-  --name temptable \
-
-```
-Note the metadata location
- "metadata_location": "s3://f063a63c-xxxx-xxxx-xxxxxxxxxxxxx--table-s3/metadata/xxxxxxxxxxxx.metadata.json"
-
-#### 6d: Update metadata location 
-Now update the metadata location for the S3 table (transactions) we created using CDK. You will need the metadata location and versionToken that you noted down in step 6a.
-
-```
-aws s3tables update-table-metadata-location \
---table-bucket-arn arn:aws:s3tables:<<us-east-1>>:<<111111111111>>:bucket/streamtablebucket \
---namespace analytics  \
---name transactions \
---version-token xxxxxx \
---metadata-location s3://f063a63c-xxxx-xxxx-xxxxxxxxxxxxx--table-s3/metadata/xxxxxxxxxxxx.metadata.json
-
-```
-Now, check the table (transactions) in the Athena console and we will be able to see all the columns.
-
-### Step 7: Testing the data flow from DynamoDB to s3tables
+### Step 6: Testing the data flow from DynamoDB to s3tables
 
 Let us insert some items into the DynamoDB Table using the following script. 
 
@@ -231,6 +123,18 @@ Let us insert some items into the DynamoDB Table using the following script.
 python3 scripts/create_sample_data.py
 
 ```
+
+### Step 7 : Grant LakeFormation permissions 
+
+Grant lakeformation permissions to the principal (user or role) that needs to query the table.
+
+```
+aws lakeformation grant-permissions 
+      --principal '{"DataLakePrincipalIdentifier": "arn:aws:iam::<<123456789012>>:user/<<johndoe>>"}' \
+      --resource '{"Table": {"CatalogId": "<<123456789012>>:s3tablescatalog/streamtablebucket", "DatabaseName": "analytics", "Name": "transactions"}}' \
+      --permissions SELECT DESCRIBE 
+```
+
 
 ### Step 8: Verify the streamed data
 Using Athena Console or CLI you can query the streamed data from S3 Tables (transactions). Replace the 'work-group' value with the name in your setup. Also, ensure that workgroup has already setup an output location (S3 bucket). Alternatively you can also provide the output location as part of the below query at the end like --result-configuration "OutputLocation=s3://your-bucket/query-results/". Please make sure the user has the permission to write to the S3 bucket.
@@ -271,7 +175,7 @@ SELECT
     COUNT(*) as total_transactions,
     SUM(CAST(amount AS DECIMAL(12,2))) as total_amount,
     COUNT(CASE WHEN risk_score = 'HIGH' THEN 1 END) as high_risk_count,
-    COUNT(CASE WHEN fraud_indicators.velocity_check = 'FLAG' THEN 1 END) as velocity_flags,
+    COUNT(CASE WHEN velocity_check = 'FLAG' THEN 1 END) as velocity_flags,
     COUNT(CASE WHEN status = 'FLAGGED' THEN 1 END) as flagged_transactions
 FROM transactions
 WHERE date >= CURRENT_DATE - INTERVAL '7' DAY
@@ -293,7 +197,7 @@ SELECT
     SUM(CAST(amount AS DECIMAL(12,2))) as total_amount,
     COUNT(DISTINCT customer_id) as unique_customers,
     COUNT(CASE WHEN status = 'DECLINED' THEN 1 END) as declined_count,
-    COUNT(CASE WHEN fraud_indicators.amount_threshold = 'HIGH' THEN 1 END) as high_amount_alerts
+    COUNT(CASE WHEN amount_threshold = 'HIGH' THEN 1 END) as high_amount_alerts
 FROM transactions
 WHERE date = CURRENT_DATE
 GROUP BY date, hour, merchant_category, payment_method
@@ -302,13 +206,43 @@ ORDER BY hour, total_amount DESC;
 Now you can run your analytics queries against your S3 Tables as your transactional lake. 
 
 ### Step 9: Clean up
-Delete the resources to avoid unexpected costs.
+Delete the resources to avoid unexpected costs. Empty the S3 bucket used for storing logs from Kinesis Data Firehose before destroying the stack .
 
 ```
 cdk destroy --all
 ```
 
-Note : You can tune the [buffer hints configuration](https://docs.aws.amazon.com/firehose/latest/dev/buffering.html) of the Firehose delivery stream to control the buffer size and buffer interval to optimize the time it takes for the source event to reach te destination S3 table. 
+## Additional Configuration Options
+
+### Switching Between Stream Types
+
+To switch between using Kinesis Data Streams and DynamoDB Streams, update the `stream_type` property in `cdk.context.json`:
+
+```json
+{
+  "stream_type": "kinesis"  // Use "kinesis" or "dynamodb"
+}
+```
+
+After changing this value, run `cdk deploy` again to update your infrastructure.
+
+### Lambda Functions
+
+The solution uses several Lambda functions:
+
+1. **Transform Lambda** (when using Kinesis): Processes base64-encoded data from Kinesis Firehose, extracts DynamoDB change events, and formats them for S3 Tables.
+
+2. **Firehose Lambda** (when using DynamoDB Streams): Processes DynamoDB Stream events and forwards them to Kinesis Firehose.
+
+3. **Custom Resource Lambda**: Creates and manages S3 Table resources during CDK deployment. If you need to manually create the S3 Table you can use the following CLI command using the sample tabledefinition.json file included in the repo. 
+
+```
+aws s3tables create-table --cli-input-json file://tabledefinition.json
+``` 
+
+### Buffer Configuration
+
+You can tune the [buffer hints configuration](https://docs.aws.amazon.com/firehose/latest/dev/buffering.html) of the Firehose delivery stream to control the buffer size and buffer interval to optimize the time it takes for the source event to reach the destination S3 table.
 
 
 To add additional dependencies, for example other CDK libraries, just add
